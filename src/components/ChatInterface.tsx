@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Send, Settings, History } from 'lucide-react';
+import { Send, Settings, History, Plus } from 'lucide-react';
 import type { Message } from '../types';
 import { cn } from '../utils/cn';
 
@@ -10,6 +10,8 @@ interface ChatInterfaceProps {
     isLoading: boolean;
     onOpenSettings: () => void;
     onOpenHistory: () => void;
+    animateLast: boolean;
+    onNewSession: () => void;
 }
 
 const TypewriterText: React.FC<{ text: string }> = ({ text }) => {
@@ -33,7 +35,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     onSendMessage,
     isLoading,
     onOpenSettings,
-    onOpenHistory
+    onOpenHistory,
+    animateLast,
+    onNewSession
 }) => {
     const [input, setInput] = useState('');
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -55,9 +59,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <div className="flex flex-col h-full relative">
             {/* Header */}
             <div className="h-14 flex items-center justify-between px-4 border-b border-white/5 bg-surface/50 backdrop-blur-sm z-10 absolute top-0 w-full">
-                <button onClick={onOpenHistory} className="p-2 text-gray-400 hover:text-white">
-                    <History size={20} />
-                </button>
+                <div className="flex items-center gap-1">
+                    <button onClick={onOpenHistory} className="p-2 text-gray-400 hover:text-white">
+                        <History size={20} />
+                    </button>
+                    <button onClick={onNewSession} className="px-3 py-2 text-xs rounded-lg bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10">
+                        <Plus size={14} className="inline mr-1" /> 新会话
+                    </button>
+                </div>
                 <span className="text-sm font-bold tracking-widest text-gray-300">NEURAL TWIN</span>
                 <button onClick={onOpenSettings} className="p-2 text-gray-400 hover:text-white">
                     <Settings size={20} />
@@ -94,7 +103,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                                 ? "bg-blue-600 text-white rounded-tr-none"
                                 : "bg-surface border border-white/10 text-gray-200 rounded-tl-none"
                         )}>
-                            {msg.role === 'assistant' && idx === messages.length - 1 ? (
+                            {msg.role === 'assistant' && idx === messages.length - 1 && animateLast ? (
                                 <TypewriterText text={msg.content} />
                             ) : (
                                 <div className="whitespace-pre-wrap">{msg.content}</div>

@@ -78,8 +78,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
     return (
         <div className="h-screen w-full bg-background flex justify-center overflow-hidden relative">
-            {/* Theme toggle button - Hide on Chat tab to avoid overlap with settings */}
-            {activeTab !== 2 && (
+            {/* Theme toggle button - Hide on Chat and Calendar tab to avoid overlap with controls */}
+            {activeTab !== 2 && activeTab !== 3 && (
                 <div className="absolute top-3 right-4 z-40">
                     <button
                         onClick={() => setShowThemePanel(!showThemePanel)}

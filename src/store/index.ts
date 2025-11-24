@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { TrinityValue, LogEntry, ChatSession, AppSettings } from '../types';
+import type { TrinityValue, LogEntry, ChatSession, AppSettings, Message } from '../types';
 import { storage } from '../services/storage';
 
 interface AppState {
@@ -19,6 +19,12 @@ interface AppState {
     // Chat State
     currentSession: ChatSession | null;
     setCurrentSession: (session: ChatSession | null) => void;
+    currentSessionId: string | null;
+    setCurrentSessionId: (id: string | null) => void;
+    chatMessages: Message[];
+    setChatMessages: (msgs: Message[]) => void;
+    chatIsLoading: boolean;
+    setChatLoading: (loading: boolean) => void;
 
     // Settings
     settings: AppSettings | null;
@@ -49,7 +55,13 @@ export const useStore = create<AppState>()((set) => ({
 
     // Chat
     currentSession: null,
+    currentSessionId: null,
+    chatMessages: [],
+    chatIsLoading: false,
     setCurrentSession: (session) => set({ currentSession: session }),
+    setCurrentSessionId: (id) => set({ currentSessionId: id }),
+    setChatMessages: (msgs) => set({ chatMessages: msgs }),
+    setChatLoading: (loading) => set({ chatIsLoading: loading }),
 
     // Settings
     settings: null,

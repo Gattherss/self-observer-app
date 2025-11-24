@@ -102,6 +102,11 @@ class StorageService {
         return db.get('sessions', id);
     }
 
+    async deleteSession(id: string): Promise<void> {
+        const db = await this.dbPromise;
+        await db.delete('sessions', id);
+    }
+
     // --- Settings ---
 
     async saveSettings(settings: AppSettings): Promise<void> {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../store';
 import { ChatInterface } from '../ChatInterface';
 import { sendMessageToAI, generateSystemPrompt } from '../../services/ai';
@@ -12,10 +12,19 @@ import { cn } from '../../utils/cn';
 import { startOfDay, endOfDay } from 'date-fns';
 
 export const ChatTab: React.FC = () => {
-    const { recentLogs, settings, loadSettings } = useStore();
+    const {
+        recentLogs,
+        settings,
+        loadSettings,
+        currentSessionId,
+        setCurrentSessionId,
+        chatMessages,
+        setChatMessages,
+        chatIsLoading,
+        setChatLoading,
+    } = useStore();
     const { theme, setTheme } = useTheme();
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
+    const [animateLast, setAnimateLast] = useState(true);
     const [showSettings, setShowSettings] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const [apiKey, setApiKey] = useState('');
@@ -24,6 +33,7 @@ export const ChatTab: React.FC = () => {
     const [sessions, setSessions] = useState<ChatSession[]>([]);
     const [isTesting, setIsTesting] = useState(false);
     const [testStatus, setTestStatus] = useState<'success' | 'error' | null>(null);
+    const isMountedRef = useRef(true);
 
     useEffect(() => {
         if (settings?.apiKey) setApiKey(settings.apiKey);
@@ -32,12 +42,62 @@ export const ChatTab: React.FC = () => {
     }, [settings]);
 
     useEffect(() => {
-        loadSessions();
+        loadSessions(true);
+    }, []);
+
+    useEffect(() => {
+        if (showHistory) loadSessions();
     }, [showHistory]);
 
-    const loadSessions = async () => {
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
+    const loadSessions = async (initSelect: boolean = false) => {
         const s = await storage.getSessions();
-        setSessions(s.sort((a, b) => b.lastUpdated - a.lastUpdated));
+        const sorted = s.sort((a, b) => b.lastUpdated - a.lastUpdated);
+        setSessions(sorted);
+        if (initSelect && sorted.length > 0 && !currentSessionId) {
+            setCurrentSessionId(sorted[0].id);
+            setChatMessages(sorted[0].messages);
+            setAnimateLast(false);
+        }
+    };
+
+    const startNewSession = async () => {
+        const now = Date.now();
+        const newId = uuidv4();
+        const session: ChatSession = {
+            id: newId,
+            startTime: now,
+            lastUpdated: now,
+            messages: [],
+            archived: false
+        };
+        await storage.saveSession(session);
+        setCurrentSessionId(newId);
+        setChatMessages([]);
+        setAnimateLast(false);
+        loadSessions();
+    };
+
+    const ensureSessionId = async (seedTime: number) => {
+        if (currentSessionId) return currentSessionId;
+        const newId = uuidv4();
+        const session: ChatSession = {
+            id: newId,
+            startTime: seedTime,
+            lastUpdated: seedTime,
+            messages: [],
+            archived: false
+        };
+        await storage.saveSession(session);
+        setCurrentSessionId(newId);
+        loadSessions();
+        return newId;
     };
 
     const handleSendMessage = async (content: string) => {
@@ -53,8 +113,8 @@ export const ChatTab: React.FC = () => {
             timestamp: Date.now()
         };
 
-        setMessages(prev => [...prev, userMsg]);
-        setIsLoading(true);
+        setChatMessages([...chatMessages, userMsg]);
+        setChatLoading(true);
 
         try {
             // 1. Gather Context
@@ -67,34 +127,47 @@ export const ChatTab: React.FC = () => {
             const dailyLogs = await storage.getLogs(todayStart, todayEnd);
             const weeklyLogs = await storage.getLogs(oneWeekAgo, now);
             const monthlyLogs = await storage.getLogs(oneMonthAgo, now);
+            const allLogs = await storage.getAllLogs();
+            const allLogsSorted = [...allLogs].sort((a, b) => a.timestamp - b.timestamp);
 
             const summarize = (label: string, logs: any[]) => {
-                if (!logs.length) return `${label}: 数据不足。`;
+                if (!logs.length) return `${label}: no data.`;
                 const avgP = logs.reduce((a, b) => a + b.values.p, 0) / logs.length;
                 const avgC = logs.reduce((a, b) => a + b.values.c, 0) / logs.length;
                 const avgS = logs.reduce((a, b) => a + b.values.s, 0) / logs.length;
-                return `${label}: 平均 P:${avgP.toFixed(1)} C:${avgC.toFixed(1)} S:${avgS.toFixed(1)}，样本 ${logs.length}。`;
+                return `${label}: avg P:${avgP.toFixed(1)} C:${avgC.toFixed(1)} S:${avgS.toFixed(1)}, samples ${logs.length}.`;
             };
 
-            const summaryContext = [
-                summarize("今日", dailyLogs),
-                summarize("最近7天", weeklyLogs),
-                summarize("最近30天", monthlyLogs)
-            ].join('\\n');
+            const rawLogsContext = allLogsSorted.length > 0
+                ? allLogsSorted.map(log => {
+                    const dt = new Date(log.timestamp);
+                    return `[${dt.toISOString()}] P:${log.values.p} C:${log.values.c} S:${log.values.s} tags:${(log.tags || []).join(',') || 'none'} trend:${log.trend || 'n/a'} note:${log.note || ''}`;
+                }).join('\n')
+                : 'No raw logs.';
 
-            const weeklyContext = summarize("最近7天", weeklyLogs);
+            const summaryContext = [
+                summarize("Today", dailyLogs),
+                summarize("Last 7 days", weeklyLogs),
+                summarize("Last 30 days", monthlyLogs),
+                summarize("All records", allLogsSorted),
+                'RAW LOGS (time ordered):',
+                rawLogsContext
+            ].join('\n');
+
+            const weeklyContext = summarize("Last 7 days", weeklyLogs);
 
             const allEvents = await storage.getEvents();
-            const upcomingEvents = allEvents
-                .filter(e => e.startTime >= now && e.startTime < now + 24 * 60 * 60 * 1000)
-                .sort((a, b) => a.startTime - b.startTime);
+            const allEventsSorted = allEvents.sort((a, b) => a.startTime - b.startTime);
 
-            const calendarContext = upcomingEvents.length > 0
-                ? upcomingEvents.map(e => `[${new Date(e.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}] ${e.title}`).join('\n')
-                : "No events in next 24h.";
+            const calendarContext = allEventsSorted.length > 0
+                ? allEventsSorted.map(e => {
+                    const dt = new Date(e.startTime);
+                    return `[${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}] ${e.title}`;
+                }).join('\n')
+                : 'No calendar events.';
 
-            const systemPrompt = generateSystemPrompt(recentLogs, weeklyContext, calendarContext, summaryContext);
-            const aiResponseContent = await sendMessageToAI([...messages, userMsg], apiKey, systemPrompt, baseUrl, modelName);
+            const systemPrompt = generateSystemPrompt(allLogsSorted, weeklyContext, calendarContext, summaryContext);
+            const aiResponseContent = await sendMessageToAI([...chatMessages, userMsg], apiKey, systemPrompt, baseUrl, modelName);
 
             const aiMsg: Message = {
                 id: uuidv4(),
@@ -103,18 +176,22 @@ export const ChatTab: React.FC = () => {
                 timestamp: Date.now()
             };
 
-            setMessages(prev => [...prev, aiMsg]);
+            const updatedMessages = [...chatMessages, userMsg, aiMsg];
+            setChatMessages(updatedMessages);
+            if (isMountedRef.current) setAnimateLast(true);
 
-            // Auto-save session
-            // In a real app, we'd manage session ID persistence
+            // Persist into a single session (not per message)
+            const sessionId = await ensureSessionId(userMsg.timestamp);
             const session: ChatSession = {
-                id: uuidv4(), // Ideally keep same ID for current session
-                startTime: messages.length > 0 ? messages[0].timestamp : Date.now(),
+                id: sessionId,
+                startTime: updatedMessages[0]?.timestamp || Date.now(),
                 lastUpdated: Date.now(),
-                messages: [...messages, userMsg, aiMsg],
+                messages: updatedMessages,
                 archived: false
             };
             await storage.saveSession(session);
+            setCurrentSessionId(sessionId);
+            loadSessions();
 
         } catch {
             const errorMsg: Message = {
@@ -123,9 +200,10 @@ export const ChatTab: React.FC = () => {
                 content: "Error: Failed to connect to Neural Twin. Check API Key.",
                 timestamp: Date.now()
             };
-            setMessages(prev => [...prev, errorMsg]);
+            setChatMessages([...chatMessages, errorMsg]);
+            if (isMountedRef.current) setAnimateLast(false);
         } finally {
-            setIsLoading(false);
+            setChatLoading(false);
         }
     };
 
@@ -136,18 +214,33 @@ export const ChatTab: React.FC = () => {
     };
 
     const loadSession = (session: ChatSession) => {
-        setMessages(session.messages);
+        setChatMessages(session.messages);
+        setCurrentSessionId(session.id);
+        setAnimateLast(false); // Do not typewriter historical messages
         setShowHistory(false);
+    };
+
+    const deleteSession = async (id: string) => {
+        await storage.deleteSession(id);
+        // If deleting current session, clear local state
+        if (currentSessionId === id) {
+            setCurrentSessionId(null);
+            setChatMessages([]);
+            setAnimateLast(false);
+        }
+        loadSessions(true);
     };
 
     return (
         <div className="h-full relative overflow-hidden">
             <ChatInterface
-                messages={messages}
+                messages={chatMessages}
                 onSendMessage={handleSendMessage}
-                isLoading={isLoading}
+                isLoading={chatIsLoading}
                 onOpenSettings={() => setShowSettings(true)}
                 onOpenHistory={() => setShowHistory(true)}
+                animateLast={animateLast}
+                onNewSession={startNewSession}
             />
 
             {/* Settings Modal */}
@@ -262,23 +355,33 @@ export const ChatTab: React.FC = () => {
                         </div>
                         <div className="flex-1 overflow-y-auto p-4 space-y-3">
                             {sessions.map(session => (
-                                <button
+                                <div
                                     key={session.id}
-                                    onClick={() => loadSession(session)}
-                                    className="w-full text-left p-4 rounded-xl bg-background border border-white/5 hover:border-blue-500/30 transition-all group"
+                                    className="w-full text-left p-4 rounded-xl bg-background border border-white/5 transition-all group flex items-start gap-3"
                                 >
-                                    <div className="flex justify-between items-center mb-1">
-                                        <span className="text-xs text-blue-400 font-mono">
-                                            {new Date(session.startTime).toLocaleDateString()}
-                                        </span>
-                                        <span className="text-[10px] text-gray-600">
-                                            {new Date(session.startTime).toLocaleTimeString()}
-                                        </span>
-                                    </div>
-                                    <p className="text-sm text-gray-300 line-clamp-2">
-                                        {session.messages.find(m => m.role === 'user')?.content || 'Empty Session'}
-                                    </p>
-                                </button>
+                                    <button
+                                        onClick={() => loadSession(session)}
+                                        className="flex-1 text-left"
+                                    >
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-xs text-blue-400 font-mono">
+                                                {new Date(session.startTime).toLocaleDateString()}
+                                            </span>
+                                            <span className="text-[10px] text-gray-600">
+                                                {new Date(session.startTime).toLocaleTimeString()}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-gray-300 line-clamp-2">
+                                            {session.messages.find(m => m.role === 'user')?.content || 'Empty Session'}
+                                        </p>
+                                    </button>
+                                    <button
+                                        onClick={() => deleteSession(session.id)}
+                                        className="px-2 py-1 text-[11px] text-red-400 hover:text-red-200 border border-red-500/30 rounded-lg"
+                                    >
+                                        删除
+                                    </button>
+                                </div>
                             ))}
                         </div>
                     </motion.div>
@@ -287,3 +390,14 @@ export const ChatTab: React.FC = () => {
         </div>
     );
 };
+
+
+
+
+
+
+
+
+
+
+
