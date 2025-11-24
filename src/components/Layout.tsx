@@ -26,25 +26,39 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     // Swipe Logic
     const [touchStart, setTouchStart] = React.useState<number | null>(null);
     const [touchEnd, setTouchEnd] = React.useState<number | null>(null);
+    const [allowSwipe, setAllowSwipe] = React.useState(false);
     const minSwipeDistance = 50;
 
     const onTouchStart = (e: React.TouchEvent) => {
         const target = e.target as HTMLElement;
         // Exclude interactive elements to prevent gesture conflicts
         if (target.closest('input, button, [role="slider"], textarea, select, a')) {
+            setAllowSwipe(false);
             return;
         }
+        const touch = e.targetTouches[0];
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+        const swipeZoneTop = viewportHeight - 120; // only allow horizontal swipe near bottom nav
+        const isInSwipeZone = touch.clientY >= swipeZoneTop;
+        setAllowSwipe(isInSwipeZone);
+        if (!isInSwipeZone) return;
+
         setTouchEnd(null);
-        setTouchStart(e.targetTouches[0].clientX);
+        setTouchStart(touch.clientX);
     };
 
     const onTouchMove = (e: React.TouchEvent) => {
-        if (touchStart === null) return; // Skip if touch was on interactive element
+        if (!allowSwipe || touchStart === null) return; // Skip if touch was on interactive element or outside swipe zone
         setTouchEnd(e.targetTouches[0].clientX);
     };
 
     const onTouchEnd = () => {
-        if (!touchStart || !touchEnd) return;
+        if (!allowSwipe || !touchStart || !touchEnd) {
+            setAllowSwipe(false);
+            setTouchStart(null);
+            setTouchEnd(null);
+            return;
+        }
         const distance = touchStart - touchEnd;
         const isLeftSwipe = distance > minSwipeDistance;
         const isRightSwipe = distance < -minSwipeDistance;
@@ -57,6 +71,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             setActiveTab(activeTab - 1);
             soundService.playClick();
         }
+        setAllowSwipe(false);
+        setTouchStart(null);
+        setTouchEnd(null);
     };
 
     return (
