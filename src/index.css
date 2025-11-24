@@ -1,0 +1,183 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+/* Default (Cyberpunk) */
+:root,
+[data-theme='cyberpunk'] {
+  --color-background: #050505;
+  --color-surface: #121212;
+  --color-primary: #3b82f6;
+  /* Blue */
+  --color-secondary: #ef4444;
+  /* Red */
+  --color-accent: #22c55e;
+  /* Green */
+  --color-muted: #525252;
+}
+
+[data-theme='zen'] {
+  --color-background: #1c1917;
+  /* Stone 900 */
+  --color-surface: #292524;
+  /* Stone 800 */
+  --color-primary: #a8a29e;
+  /* Stone 400 */
+  --color-secondary: #d6d3d1;
+  /* Stone 300 */
+  --color-accent: #78716c;
+  /* Stone 500 */
+  --color-muted: #57534e;
+  /* Stone 600 */
+}
+
+[data-theme='minimalist'] {
+  --color-background: #000000;
+  --color-surface: #0a0a0a;
+  --color-primary: #ffffff;
+  --color-secondary: #e5e5e5;
+  --color-accent: #d4d4d4;
+  --color-muted: #404040;
+}
+
+[data-theme='neon'] {
+  --color-background: #0b0014;
+  /* Dark Purple */
+  --color-surface: #1a0b2e;
+  --color-primary: #d946ef;
+  /* Fuchsia */
+  --color-secondary: #06b6d4;
+  /* Cyan */
+  --color-accent: #facc15;
+  /* Yellow */
+  --color-muted: #4c1d95;
+}
+
+[data-theme='sunset'] {
+  --color-background: #0f172a;
+  /* Slate 900 */
+  --color-surface: #1e293b;
+  /* Slate 800 */
+  --color-primary: #f97316;
+  /* Orange */
+  --color-secondary: #8b5cf6;
+  /* Violet */
+  --color-accent: #ec4899;
+  /* Pink */
+  --color-muted: #475569;
+}
+
+[data-theme='forest'] {
+  --color-background: #051a10;
+  /* Dark Green */
+  --color-surface: #0f2e1e;
+  /* Forest Green */
+  --color-primary: #4ade80;
+  /* Green */
+  --color-secondary: #a3e635;
+  /* Lime */
+  --color-accent: #facc15;
+  /* Yellow */
+  --color-muted: #14532d;
+}
+
+[data-theme='ocean'] {
+  --color-background: #082f49;
+  /* Sky 950 */
+  --color-surface: #0c4a6e;
+  /* Sky 900 */
+  --color-primary: #38bdf8;
+  /* Sky 400 */
+  --color-secondary: #7dd3fc;
+  /* Sky 300 */
+  --color-accent: #f0f9ff;
+  /* Sky 50 */
+  --color-muted: #0369a1;
+}
+
+[data-theme='coffee'] {
+  --color-background: #281e18;
+  /* Dark Brown */
+  --color-surface: #3f3127;
+  /* Coffee */
+  --color-primary: #d4a373;
+  /* Latte */
+  --color-secondary: #faedcd;
+  /* Cream */
+  --color-accent: #ccd5ae;
+  /* Sage */
+  --color-muted: #5c483a;
+}
+
+[data-theme='white'] {
+  --color-background: #f5f5f5;
+  /* Light Grey */
+  --color-surface: #ffffff;
+  /* White */
+  --color-primary: #2563eb;
+  /* Blue */
+  --color-secondary: #dc2626;
+  /* Red */
+  --color-accent: #16a34a;
+  /* Green */
+  --color-muted: #9ca3af;
+  /* Grey */
+}
+
+[data-theme='darkgrey'] {
+  --color-background: #18181b;
+  /* Zinc 900 */
+  --color-surface: #27272a;
+  /* Zinc 800 */
+  --color-primary: #a1a1aa;
+  /* Zinc 400 */
+  --color-secondary: #d4d4d8;
+  /* Zinc 300 */
+  --color-accent: #71717a;
+  /* Zinc 500 */
+  --color-muted: #52525b;
+  /* Zinc 600 */
+}
+
+[data-theme='aurora'] {
+  --color-background: #0a0e1a;
+  /* Deep Night */
+  --color-surface: #141829;
+  /* Dark Navy */
+  --color-primary: #10b981;
+  /* Emerald Green */
+  --color-secondary: #a855f7;
+  /* Purple */
+  --color-accent: #06b6d4;
+  /* Cyan */
+  --color-muted: #334155;
+  /* Slate */
+}
+
+body {
+  margin: 0;
+  background-color: #000000;
+  color: #ffffff;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  /* Prevent body scroll, handle in app container */
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}

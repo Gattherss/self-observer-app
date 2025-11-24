@@ -1,0 +1,1 @@
+from pathlib import Path\ntext = Path('src/components/tabs/AnalyticsTab.tsx').read_text(encoding='utf-8')\nfor i,line in enumerate(text.splitlines(),1):\n    if 'Day-type filter' in line:\n        print(i, repr(line))\n

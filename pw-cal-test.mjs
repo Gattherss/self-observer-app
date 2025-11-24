@@ -1,0 +1,21 @@
+import { chromium } from "playwright-core";
+import path from "path";
+const executablePath = path.join(process.env.LOCALAPPDATA || '', 'ms-playwright', 'chromium-1148', 'chrome-win', 'chrome.exe');
+const run = async () => {
+  const browser = await chromium.launch({ headless: true, executablePath });
+  const page = await browser.newPage({ viewport: { width: 430, height: 932 } });
+  await page.goto('http://localhost:4173', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1000);
+  const saveButton = page.locator('button:has-text("¼ÇÂ¼×´Ì¬")');
+  await saveButton.scrollIntoViewIfNeeded();
+  await saveButton.click({ timeout: 10000 });
+  await page.waitForTimeout(500);
+  const calendarTab = page.locator('button:has-text("ÈÕÀú")').last();
+  await calendarTab.click({ timeout: 10000 });
+  await page.waitForTimeout(1000);
+  await page.screenshot({ path: 'calendar.png', fullPage: true });
+  const dayList = await page.textContent('div.flex-1.overflow-y-auto');
+  console.log('Day list length', dayList?.length);
+  await browser.close();
+};
+run();
