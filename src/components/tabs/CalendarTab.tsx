@@ -147,7 +147,7 @@ export const CalendarTab: React.FC = () => {
     return (
         <div className="h-full flex flex-col overflow-hidden">
             {/* Header - Fixed */}
-            <div className="flex-none px-4 pt-8 pb-4">
+            <div className="flex-none px-4 pt-4 pb-2">
                 <div className="flex items-center justify-between">
                     <h1 className="text-2xl font-bold">Data Archives</h1>
                     <div className="flex space-x-2">
@@ -166,10 +166,10 @@ export const CalendarTab: React.FC = () => {
             </div>
 
             {/* Calendar - Fixed */}
-            <div className="flex-none px-4 pb-4">
-                <div className="bg-surface rounded-2xl p-4 border border-white/5">
+            <div className="flex-none px-4 pb-2">
+                <div className="bg-surface rounded-2xl p-3 border border-white/5">
                     {/* Month Navigation */}
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between mb-2">
                         <button
                             onClick={() => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1))}
                             className="p-1.5 hover:bg-white/10 rounded transition-colors"
@@ -186,7 +186,7 @@ export const CalendarTab: React.FC = () => {
                     </div>
 
                     {/* Calendar Grid */}
-                    <div className="grid grid-cols-7 gap-1">
+                    <div className="grid grid-cols-7 gap-0.5">
                         {/* Day Headers */}
                         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
                             <div key={`header-${i}`} className="text-center text-sm sm:text-xs text-gray-500 py-2 font-medium">
