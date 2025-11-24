@@ -11,6 +11,11 @@
   --sal: env(safe-area-inset-left);
 }
 
+html {
+  background-color: #000000;
+  min-height: 100%;
+}
+
 /* Default (Cyberpunk) */
 :root,
 [data-theme='cyberpunk'] {
