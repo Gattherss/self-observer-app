@@ -19,10 +19,16 @@ export const ChatTab: React.FC = () => {
     const [showSettings, setShowSettings] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const [apiKey, setApiKey] = useState('');
+    const [baseUrl, setBaseUrl] = useState('');
+    const [modelName, setModelName] = useState('');
     const [sessions, setSessions] = useState<ChatSession[]>([]);
+    const [isTesting, setIsTesting] = useState(false);
+    const [testStatus, setTestStatus] = useState<'success' | 'error' | null>(null);
 
     useEffect(() => {
         if (settings?.apiKey) setApiKey(settings.apiKey);
+        if (settings?.baseUrl) setBaseUrl(settings.baseUrl);
+        if (settings?.modelName) setModelName(settings.modelName);
     }, [settings]);
 
     useEffect(() => {
@@ -88,7 +94,7 @@ export const ChatTab: React.FC = () => {
                 : "No events in next 24h.";
 
             const systemPrompt = generateSystemPrompt(recentLogs, weeklyContext, calendarContext, summaryContext);
-            const aiResponseContent = await sendMessageToAI([...messages, userMsg], apiKey, systemPrompt);
+            const aiResponseContent = await sendMessageToAI([...messages, userMsg], apiKey, systemPrompt, baseUrl, modelName);
 
             const aiMsg: Message = {
                 id: uuidv4(),
@@ -124,7 +130,7 @@ export const ChatTab: React.FC = () => {
     };
 
     const saveSettings = async () => {
-        await storage.saveSettings({ ...settings!, apiKey });
+        await storage.saveSettings({ ...settings!, apiKey, baseUrl, modelName });
         await loadSettings();
         setShowSettings(false);
     };
@@ -154,14 +160,64 @@ export const ChatTab: React.FC = () => {
                         <div className="bg-surface w-full max-w-sm rounded-2xl p-6 border border-white/10">
                             <h2 className="text-xl font-bold mb-4">Neural Settings</h2>
                             <div className="mb-4">
-                                <label className="block text-xs text-gray-400 mb-2">DEEPSEEK API KEY</label>
+                                <label className="block text-xs text-gray-400 mb-2">API BASE URL (Optional)</label>
                                 <input
-                                    type="password"
-                                    value={apiKey}
-                                    onChange={(e) => setApiKey(e.target.value)}
-                                    className="w-full bg-background border border-white/10 rounded-lg p-3 text-sm"
-                                    placeholder="sk-..."
+                                    type="text"
+                                    value={baseUrl}
+                                    onChange={(e) => setBaseUrl(e.target.value)}
+                                    className="w-full bg-background border border-white/10 rounded-lg p-3 text-sm mb-4"
+                                    placeholder="https://api.deepseek.com"
                                 />
+
+                                <label className="block text-xs text-gray-400 mb-2">MODEL NAME (Optional)</label>
+                                <input
+                                    type="text"
+                                    value={modelName}
+                                    onChange={(e) => setModelName(e.target.value)}
+                                    className="w-full bg-background border border-white/10 rounded-lg p-3 text-sm mb-4"
+                                    placeholder="deepseek-reasoner"
+                                />
+
+                                <label className="block text-xs text-gray-400 mb-2">API KEY</label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="password"
+                                        value={apiKey}
+                                        onChange={(e) => setApiKey(e.target.value)}
+                                        className="flex-1 bg-background border border-white/10 rounded-lg p-3 text-sm"
+                                        placeholder="sk-..."
+                                    />
+                                    <button
+                                        onClick={async () => {
+                                            setIsTesting(true);
+                                            setTestStatus(null);
+                                            try {
+                                                await sendMessageToAI(
+                                                    [{ id: 'test', role: 'user', content: 'Test connection', timestamp: Date.now() }],
+                                                    apiKey,
+                                                    'You are a test bot. Reply with "Connection Successful".',
+                                                    baseUrl,
+                                                    modelName
+                                                );
+                                                setTestStatus('success');
+                                            } catch (error) {
+                                                setTestStatus('error');
+                                            } finally {
+                                                setIsTesting(false);
+                                            }
+                                        }}
+                                        disabled={!apiKey || isTesting}
+                                        className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isTesting ? 'Testing...' : 'Test'}
+                                    </button>
+                                </div>
+                                {testStatus === 'success' && (
+                                    <p className="mt-2 text-xs text-green-400">Connection Successful</p>
+                                )}
+                                {testStatus === 'error' && (
+                                    <p className="mt-2 text-xs text-red-400">Connection Failed</p>
+                                )}
                             </div>
 
                             <div className="mb-6">

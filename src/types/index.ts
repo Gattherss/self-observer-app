@@ -34,6 +34,8 @@ export interface ChatSession {
 export interface AppSettings {
     key?: string; // IndexedDB key
     apiKey?: string; // Stored locally
+    baseUrl?: string; // Custom API Base URL
+    modelName?: string; // Model name (e.g., 'deepseek-chat', 'Qwen/Qwen2.5-Coder-32B-Instruct')
     themeMode: 'dark' | 'light' | 'system';
     userName?: string;
 }

@@ -29,11 +29,19 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     const minSwipeDistance = 50;
 
     const onTouchStart = (e: React.TouchEvent) => {
+        const target = e.target as HTMLElement;
+        // Exclude interactive elements to prevent gesture conflicts
+        if (target.closest('input, button, [role="slider"], textarea, select, a')) {
+            return;
+        }
         setTouchEnd(null);
         setTouchStart(e.targetTouches[0].clientX);
     };
 
-    const onTouchMove = (e: React.TouchEvent) => setTouchEnd(e.targetTouches[0].clientX);
+    const onTouchMove = (e: React.TouchEvent) => {
+        if (touchStart === null) return; // Skip if touch was on interactive element
+        setTouchEnd(e.targetTouches[0].clientX);
+    };
 
     const onTouchEnd = () => {
         if (!touchStart || !touchEnd) return;
@@ -52,7 +60,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     };
 
     return (
-        <div className="min-h-screen w-full bg-background flex justify-center overflow-hidden relative">
+        <div className="h-screen w-full bg-background flex justify-center overflow-hidden relative">
             {/* Theme toggle button - Hide on Chat tab to avoid overlap with settings */}
             {activeTab !== 2 && (
                 <div className="absolute top-3 right-4 z-40">
