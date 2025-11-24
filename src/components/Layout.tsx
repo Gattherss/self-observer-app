@@ -53,47 +53,49 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
     return (
         <div className="min-h-screen w-full bg-background flex justify-center overflow-hidden relative">
-            {/* Theme toggle button */}
-            <div className="absolute top-3 right-4 z-40">
-                <button
-                    onClick={() => setShowThemePanel(!showThemePanel)}
-                    className="px-3 py-2 rounded-lg bg-surface border border-white/10 text-xs text-gray-200 hover:bg-white/5 transition-all shadow-sm"
-                >
-                    主题
-                </button>
-                {showThemePanel && (
-                    <div className="mt-2 w-56 bg-surface border border-white/10 rounded-xl p-3 shadow-xl space-y-3">
-                        <div className="text-[11px] text-gray-400">色彩</div>
-                        <div className="flex gap-2 flex-wrap">
-                            {(['cyberpunk', 'zen', 'minimalist', 'neon', 'sunset', 'forest', 'ocean', 'coffee'] as const).map(t => (
-                                <button
-                                    key={t}
-                                    onClick={() => setTheme(t)}
-                                    className={cn(
-                                        "px-3 py-2 rounded-lg text-xs font-bold capitalize border transition-all",
-                                        theme === t ? "bg-primary text-black border-primary" : "bg-transparent text-gray-400 border-white/10 hover:border-white/30"
-                                    )}
-                                >
-                                    {t}
-                                </button>
-                            ))}
+            {/* Theme toggle button - Hide on Chat tab to avoid overlap with settings */}
+            {activeTab !== 2 && (
+                <div className="absolute top-3 right-4 z-40">
+                    <button
+                        onClick={() => setShowThemePanel(!showThemePanel)}
+                        className="px-3 py-2 rounded-lg bg-surface border border-white/10 text-xs text-gray-200 hover:bg-white/5 transition-all shadow-sm"
+                    >
+                        主题
+                    </button>
+                    {showThemePanel && (
+                        <div className="mt-2 w-56 bg-surface border border-white/10 rounded-xl p-3 shadow-xl space-y-3">
+                            <div className="text-[11px] text-gray-400">色彩</div>
+                            <div className="flex gap-2 flex-wrap">
+                                {(['cyberpunk', 'zen', 'minimalist', 'neon', 'sunset', 'forest', 'ocean', 'coffee', 'white', 'darkgrey', 'aurora'] as const).map(t => (
+                                    <button
+                                        key={t}
+                                        onClick={() => setTheme(t)}
+                                        className={cn(
+                                            "px-3 py-2 rounded-lg text-xs font-bold capitalize border transition-all",
+                                            theme === t ? "bg-primary text-black border-primary" : "bg-transparent text-gray-400 border-white/10 hover:border-white/30"
+                                        )}
+                                    >
+                                        {t}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="text-[11px] text-gray-400">字号</div>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="range"
+                                    min={0.9}
+                                    max={1.3}
+                                    step={0.05}
+                                    value={fontScale}
+                                    onChange={(e) => setFontScale(Number(e.target.value))}
+                                    className="flex-1"
+                                />
+                                <span className="text-xs text-gray-300">{(fontScale * 100).toFixed(0)}%</span>
+                            </div>
                         </div>
-                        <div className="text-[11px] text-gray-400">字号</div>
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="range"
-                                min={0.9}
-                                max={1.3}
-                                step={0.05}
-                                value={fontScale}
-                                onChange={(e) => setFontScale(Number(e.target.value))}
-                                className="flex-1"
-                            />
-                            <span className="text-xs text-gray-300">{(fontScale * 100).toFixed(0)}%</span>
-                        </div>
-                    </div>
-                )}
-            </div>
+                    )}
+                </div>
+            )}
             {/* Mobile Container */}
             <div className="w-full max-w-[480px] h-screen bg-surface relative flex flex-col shadow-2xl overflow-hidden">
 
