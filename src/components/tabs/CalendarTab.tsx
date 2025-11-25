@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store';
 import { storage } from '../../services/storage';
 import type { LogEntry, TrendDirection, CalendarEvent } from '../../types';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, startOfDay, endOfDay, set } from 'date-fns';
-import { Download, Upload, ChevronLeft, ChevronRight, ChevronDown, Trash2, CalendarPlus } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, startOfDay, endOfDay } from 'date-fns';
+import { Download, Upload, ChevronLeft, ChevronRight, ChevronDown, Trash2 } from 'lucide-react';
 import { exportLogsToCSV, parseCSV } from '../../utils/csv';
 import { cn } from '../../utils/cn';
 
@@ -14,11 +14,6 @@ export const CalendarTab: React.FC = () => {
     const [dayLogs, setDayLogs] = useState<LogEntry[]>([]);
     const [allMonthLogs, setAllMonthLogs] = useState<LogEntry[]>([]);
     const [events, setEvents] = useState<CalendarEvent[]>([]);
-    const [showEvents, setShowEvents] = useState(false);
-
-    const [eventTitle, setEventTitle] = useState('');
-    const [eventDesc, setEventDesc] = useState('');
-    const [eventTime, setEventTime] = useState('09:00');
 
     // Load month data when current month changes
     useEffect(() => {
@@ -119,36 +114,6 @@ export const CalendarTab: React.FC = () => {
         storage.getLogs(dayStart, dayEnd).then(setDayLogs);
     };
 
-    const handleAddEvent = async () => {
-        if (!eventTitle.trim()) return;
-        const [h, m] = eventTime.split(':').map(n => parseInt(n, 10));
-        const startTime = set(selectedDate, { hours: h || 0, minutes: m || 0, seconds: 0, milliseconds: 0 }).getTime();
-        const endTime = startTime + 60 * 60 * 1000;
-        const newEvent: CalendarEvent = {
-            id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`,
-            title: eventTitle.trim(),
-            startTime,
-            endTime,
-            description: eventDesc.trim()
-        };
-        await storage.saveEvent(newEvent);
-        setEventTitle('');
-        setEventDesc('');
-        setEventTime('09:00');
-        const start = startOfMonth(currentDate).getTime();
-        const end = endOfMonth(currentDate).getTime();
-        storage.getEvents().then(setEvents);
-        storage.getLogs(start, end).then(setAllMonthLogs);
-    };
-
-    const handleDeleteEvent = async (eventId: string) => {
-        if (!window.confirm('确认删除这个事件吗？')) return;
-        await storage.deleteEvent(eventId);
-        const start = startOfMonth(currentDate).getTime();
-        const end = endOfMonth(currentDate).getTime();
-        storage.getEvents().then(setEvents);
-        storage.getLogs(start, end).then(setAllMonthLogs);
-    };
     useEffect(() => {
         const handler = () => {
             const start = startOfMonth(currentDate).getTime();

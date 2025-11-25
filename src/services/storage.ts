@@ -131,6 +131,10 @@ class StorageService {
         return db.getAllFromIndex('events', 'by-startTime');
     }
 
+    async deleteEvent(id: string): Promise<void> {
+        const db = await this.dbPromise;
+        await db.delete('events', id);
+    }
 
 }
 
