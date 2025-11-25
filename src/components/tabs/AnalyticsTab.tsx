@@ -98,7 +98,7 @@ export const AnalyticsTab: React.FC = () => {
 
     // Collapsible and help
     const [showHelp, setShowHelp] = useState(false);
-    const [showBaseline, setShowBaseline] = useState(true);
+    const [showBaseline, setShowBaseline] = useState(false);
 
     useEffect(() => {
         const loadData = async () => {
@@ -391,7 +391,7 @@ export const AnalyticsTab: React.FC = () => {
             </div>
 
             {/* Charts + Heatmap + Seasonal */}
-            <div className="flex-1 w-full min-h-0 overflow-y-auto pb-20 space-y-4">
+            <div className="flex-1 w-full min-h-0 overflow-y-auto pb-6 pb-safe space-y-4">
                 <div className="h-[400px]">
                     <AnalyticsCharts
                         data={chartData}

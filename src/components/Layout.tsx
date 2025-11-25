@@ -23,59 +23,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         { id: 3, label: UI_TEXT.tabs.calendar, icon: Calendar },
     ];
 
-    // Swipe Logic
-    const [touchStart, setTouchStart] = React.useState<number | null>(null);
-    const [touchEnd, setTouchEnd] = React.useState<number | null>(null);
-    const [allowSwipe, setAllowSwipe] = React.useState(false);
-    const minSwipeDistance = 50;
-
-    const onTouchStart = (e: React.TouchEvent) => {
-        const target = e.target as HTMLElement;
-        // Exclude interactive elements to prevent gesture conflicts
-        if (target.closest('input, button, [role="slider"], textarea, select, a')) {
-            setAllowSwipe(false);
-            return;
-        }
-        const touch = e.targetTouches[0];
-        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-        const swipeZoneTop = viewportHeight - 120; // only allow horizontal swipe near bottom nav
-        const isInSwipeZone = touch.clientY >= swipeZoneTop;
-        setAllowSwipe(isInSwipeZone);
-        if (!isInSwipeZone) return;
-
-        setTouchEnd(null);
-        setTouchStart(touch.clientX);
-    };
-
-    const onTouchMove = (e: React.TouchEvent) => {
-        if (!allowSwipe || touchStart === null) return; // Skip if touch was on interactive element or outside swipe zone
-        setTouchEnd(e.targetTouches[0].clientX);
-    };
-
-    const onTouchEnd = () => {
-        if (!allowSwipe || !touchStart || !touchEnd) {
-            setAllowSwipe(false);
-            setTouchStart(null);
-            setTouchEnd(null);
-            return;
-        }
-        const distance = touchStart - touchEnd;
-        const isLeftSwipe = distance > minSwipeDistance;
-        const isRightSwipe = distance < -minSwipeDistance;
-
-        if (isLeftSwipe && activeTab < tabs.length - 1) {
-            setActiveTab(activeTab + 1);
-            soundService.playClick();
-        }
-        if (isRightSwipe && activeTab > 0) {
-            setActiveTab(activeTab - 1);
-            soundService.playClick();
-        }
-        setAllowSwipe(false);
-        setTouchStart(null);
-        setTouchEnd(null);
-    };
-
     return (
         <div className="h-screen w-full bg-background flex justify-center overflow-hidden relative">
             {/* Theme toggle button - Hide on Chat and Calendar tab to avoid overlap with controls */}
@@ -127,9 +74,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 {/* Main Content Area */}
                 <main
                     className="flex-1 overflow-hidden relative"
-                    onTouchStart={onTouchStart}
-                    onTouchMove={onTouchMove}
-                    onTouchEnd={onTouchEnd}
                 >
                     <AnimatePresence mode="wait">
                         <motion.div
