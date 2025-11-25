@@ -97,10 +97,6 @@ export const CalendarTab: React.FC = () => {
         return allMonthLogs.some(l => isSameDay(l.timestamp, date));
     };
 
-    const hasEvent = (date: Date) => {
-        return events.some(e => isSameDay(e.startTime, date));
-    };
-
     const dayEventLogIds = new Set(dayLogs.map(l => l.id));
     const dayEvents = events.filter(e =>
         isSameDay(e.startTime, selectedDate) &&
@@ -228,7 +224,7 @@ export const CalendarTab: React.FC = () => {
                             const isSelected = isSameDay(day, selectedDate);
                             const isToday = isSameDay(day, new Date());
                             const hasLog = hasData(day);
-                            const hasEvt = hasEvent(day);
+                            const showDot = hasLog; // Dot only when there is at least one log for that date
 
                             return (
                                 <button
@@ -241,13 +237,13 @@ export const CalendarTab: React.FC = () => {
                                             : "hover:bg-white/5",
                                         isToday && !isSelected && "ring-1 ring-blue-500/50"
                                     )}
-                                >
-                                    <span>{format(day, 'd')}</span>
-                                    {(hasLog || hasEvt) && (
+                                    >
+                                        <span>{format(day, 'd')}</span>
+                                    {showDot && (
                                         <div
                                             className={cn(
                                                 "w-1 h-1 rounded-full -mt-0.5",
-                                                isSelected ? "bg-white" : hasEvt ? "bg-amber-400" : "bg-blue-500"
+                                                isSelected ? "bg-white" : "bg-blue-500"
                                             )}
                                         />
                                     )}
