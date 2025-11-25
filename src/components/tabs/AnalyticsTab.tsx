@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Info, X } from 'lucide-react';
-import { startOfDay, endOfDay } from 'date-fns';
+import { startOfDay, endOfDay, startOfWeek, addWeeks, addDays, startOfMonth, endOfMonth, subMonths, format, differenceInCalendarDays } from 'date-fns';
 import { useStore } from '../../store';
 import { AnalyticsCharts } from '../AnalyticsCharts';
 import { LandscapeChart } from '../LandscapeChart';
@@ -10,9 +10,14 @@ import type { LogEntry, TrinityValue } from '../../types';
 import { storage } from '../../services/storage';
 import { UI_TEXT } from '../../utils/constants';
 import { cn } from '../../utils/cn';
+import { DEFAULT_BASELINE, computeMedianStats, getMonthKey } from '../../utils/baseline';
 
-type DayType = 'all' | 'weekday' | 'weekend';
-type HeatmapRange = 1 | 7 | 30;
+type HeatView = 'p' | 'c' | 's';
+
+const HEAT_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEK_STARTS_ON: 0 | 1 | 2 | 3 | 4 | 5 | 6 = 1;
+const alignToWeekStart = (date: Date) => startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON }).getTime();
 
 const seasonOfMonth = (m: number) => {
     if (m === 11 || m === 0 || m === 1) return 'winter';
@@ -24,21 +29,22 @@ const seasonOfMonth = (m: number) => {
 const buildMatrix = (
     logs: LogEntry[],
     accessor: (log: LogEntry) => number,
-    days: HeatmapRange,
+    startTs: number,
+    days: number,
     tag: string | 'all'
 ) => {
-    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-    const matrix = Array.from({ length: 7 }, () => Array(24).fill(0));
-    const counts = Array.from({ length: 7 }, () => Array(24).fill(0));
+    const endTs = startTs + days * DAY_MS;
+    const matrix = Array.from({ length: days }, () => Array(24).fill(0));
+    const counts = Array.from({ length: days }, () => Array(24).fill(0));
 
     logs.forEach(log => {
-        if (log.timestamp < cutoff) return;
+        if (log.timestamp < startTs || log.timestamp >= endTs) return;
         if (tag !== 'all' && !(log.tags || []).includes(tag)) return;
         const d = new Date(log.timestamp);
-        const day = d.getDay(); // 0-6
         const hour = d.getHours();
-        matrix[day][hour] += accessor(log);
-        counts[day][hour] += 1;
+        const dayIndex = Math.min(days - 1, Math.max(0, Math.floor((d.getTime() - startTs) / DAY_MS)));
+        matrix[dayIndex][hour] += accessor(log);
+        counts[dayIndex][hour] += 1;
     });
 
     return matrix.map((col, day) =>
@@ -64,62 +70,98 @@ export const AnalyticsTab: React.FC = () => {
     const [hoverDelta, setHoverDelta] = useState<TrinityValue | null>(null);
     const [hoverTime, setHoverTime] = useState<string | null>(null);
 
-    // Baseline config
-    const [baselineDays, setBaselineDays] = useState<7 | 30>(30);
-    const [dayType, setDayType] = useState<DayType>('all');
+    // Baseline states
+    const [lastMonthBaseline, setLastMonthBaseline] = useState<{ monthKey: string; values: TrinityValue; sample: number; lowConfidence: boolean }>({
+        monthKey: '',
+        values: DEFAULT_BASELINE,
+        sample: 0,
+        lowConfidence: true,
+    });
+    const [currentMonthStats, setCurrentMonthStats] = useState<{ values: TrinityValue; sample: number; lowConfidence: boolean }>({
+        values: DEFAULT_BASELINE,
+        sample: 0,
+        lowConfidence: true,
+    });
+    const [lastMonthLogs, setLastMonthLogs] = useState<LogEntry[]>([]);
+    const [allHistoryLogs, setAllHistoryLogs] = useState<LogEntry[]>([]);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [selectedTag, setSelectedTag] = useState<string>('all');
-    const [baselineSample, setBaselineSample] = useState<number>(0);
+    const [baselineConfidence, setBaselineConfidence] = useState<number>(0);
 
-    // History
-    const [allHistoryLogs, setAllHistoryLogs] = useState<LogEntry[]>([]);
-    const [heatRange, setHeatRange] = useState<HeatmapRange>(7);
+    // Heatmap
+    const [heatView, setHeatView] = useState<HeatView>('c');
+    const clampHeatStart = (date: Date) => {
+        const currentWeekStart = alignToWeekStart(new Date());
+        return Math.min(alignToWeekStart(date), currentWeekStart);
+    };
+    const [heatStart, setHeatStart] = useState<number>(() => clampHeatStart(new Date()));
 
-    // Help modal
+    // Collapsible and help
     const [showHelp, setShowHelp] = useState(false);
+    const [showBaseline, setShowBaseline] = useState(true);
 
-    // Load analytics data
     useEffect(() => {
         const loadData = async () => {
-            const start = startOfDay(new Date()).getTime();
-            const end = endOfDay(new Date()).getTime();
-            const todayLogsRaw = await storage.getLogs(start, end);
+            const now = new Date();
+            const todayStart = startOfDay(now).getTime();
+            const todayEnd = endOfDay(now).getTime();
 
-            // Baseline window
-            const historyStart = start - baselineDays * 24 * 60 * 60 * 1000;
-            let historyLogs = await storage.getLogs(historyStart, start);
+            const todayLogsRaw = await storage.getLogs(todayStart, todayEnd);
 
-            if (dayType !== 'all') {
-                const isWeekend = (ts: number) => {
-                    const d = new Date(ts).getDay();
-                    return d === 0 || d === 6;
-                };
-                historyLogs = historyLogs.filter(log => dayType === 'weekend' ? isWeekend(log.timestamp) : !isWeekend(log.timestamp));
-            }
+            const lastMonthDate = subMonths(now, 1);
+            const lastMonthStart = startOfMonth(lastMonthDate).getTime();
+            const lastMonthEnd = endOfMonth(lastMonthDate).getTime();
+            const thisMonthStart = startOfMonth(now).getTime();
 
+            let lastMonthLogsFetched = await storage.getLogs(lastMonthStart, lastMonthEnd);
+            let currentMonthLogs = await storage.getLogs(thisMonthStart, now.getTime());
+            const allLogs = await storage.getLogs(0, now.getTime());
+
+            // Apply tag filter if not all
             const filterByTag = (logs: LogEntry[]) => {
                 if (selectedTag === 'all') return logs;
                 return logs.filter(l => (l.tags || []).includes(selectedTag));
             };
-
+            lastMonthLogsFetched = filterByTag(lastMonthLogsFetched);
+            currentMonthLogs = filterByTag(currentMonthLogs);
             const todayLogs = filterByTag(todayLogsRaw);
-            const baselineLogs = filterByTag(historyLogs);
-            setBaselineSample(baselineLogs.length);
 
-            const processed = processChartData(todayLogs, baselineLogs);
-            setChartData(processed);
-
-            const allLogs = await storage.getLogs(0, end);
+            setLastMonthLogs(lastMonthLogsFetched);
             setAllHistoryLogs(allLogs);
-
             const tagSet = new Set<string>();
             allLogs.forEach(l => (l.tags || []).forEach(t => t && tagSet.add(t)));
             setAvailableTags(Array.from(tagSet));
+
+            const lastMonthKey = getMonthKey(lastMonthDate);
+            const lastMonthStats = computeMedianStats(lastMonthLogsFetched);
+            await storage.saveBaseline({
+                monthKey: lastMonthKey,
+                values: lastMonthStats.values,
+                sample: lastMonthStats.sample,
+                lowConfidence: lastMonthStats.lowConfidence,
+                computedAt: Date.now(),
+            });
+            setLastMonthBaseline({
+                monthKey: lastMonthKey,
+                values: lastMonthStats.values,
+                sample: lastMonthStats.sample,
+                lowConfidence: lastMonthStats.lowConfidence,
+            });
+
+            const currentStats = computeMedianStats(currentMonthLogs);
+            setCurrentMonthStats(currentStats);
+
+            const days = differenceInCalendarDays(endOfMonth(lastMonthDate), startOfMonth(lastMonthDate)) + 1;
+            const ratio = Math.min(1, lastMonthStats.sample / Math.max(1, days));
+            setBaselineConfidence(Math.round(ratio * 100));
+
+            const processed = processChartData(todayLogs, lastMonthLogsFetched);
+            setChartData(processed);
         };
         loadData();
-    }, [recentLogs, baselineDays, dayType, selectedTag]);
+    }, [recentLogs, selectedTag]);
 
-    // Display values
+    // Display values (radar)
     const displayValues = useMemo(() => {
         if (hoverValues) return hoverValues;
         if (recentLogs.length > 0) return recentLogs[recentLogs.length - 1].values;
@@ -131,46 +173,43 @@ export const AnalyticsTab: React.FC = () => {
         return `${sign}${val.toFixed(1)}`;
     };
 
-    const latestPoint = useMemo(() => {
-        return [...chartData].reverse().find(p => p.p_actual !== null || p.c_actual !== null || p.s_actual !== null);
-    }, [chartData]);
-
-    const latestDelta = useMemo(() => {
-        if (!latestPoint) return null;
+    const monthDelta = useMemo<TrinityValue>(() => {
         return {
-            p: (latestPoint.p_actual ?? latestPoint.p_baseline) - latestPoint.p_baseline,
-            c: (latestPoint.c_actual ?? latestPoint.c_baseline) - latestPoint.c_baseline,
-            s: (latestPoint.s_actual ?? latestPoint.s_baseline) - latestPoint.s_baseline
+            p: currentMonthStats.values.p - lastMonthBaseline.values.p,
+            c: currentMonthStats.values.c - lastMonthBaseline.values.c,
+            s: currentMonthStats.values.s - lastMonthBaseline.values.s,
         };
-    }, [latestPoint]);
+    }, [currentMonthStats.values, lastMonthBaseline.values]);
 
-    const baselineConfidence = useMemo(() => {
-        const expected = baselineDays; // assume at least one log per day
-        const ratio = Math.min(1, baselineSample / Math.max(1, expected));
-        return Math.round(ratio * 100);
-    }, [baselineSample, baselineDays]);
+    const matrixP = useMemo(() => buildMatrix(lastMonthLogs, l => l.values.p, heatStart, HEAT_DAYS, selectedTag), [lastMonthLogs, heatStart, selectedTag]);
+    const matrixC = useMemo(() => buildMatrix(lastMonthLogs, l => l.values.c, heatStart, HEAT_DAYS, selectedTag), [lastMonthLogs, heatStart, selectedTag]);
+    const matrixS = useMemo(() => buildMatrix(lastMonthLogs, l => l.values.s, heatStart, HEAT_DAYS, selectedTag), [lastMonthLogs, heatStart, selectedTag]);
+    const dayLabels = useMemo(() => {
+        return Array.from({ length: HEAT_DAYS }).map((_, idx) => {
+            const d = addDays(new Date(heatStart), idx);
+            return format(d, 'MM.dd');
+        });
+    }, [heatStart]);
+    const heatRangeLabel = useMemo(() => {
+        const start = new Date(heatStart);
+        const end = addDays(new Date(heatStart), HEAT_DAYS - 1);
+        return `${format(start, 'yyyy.MM.dd')} - ${format(end, 'yyyy.MM.dd')}`;
+    }, [heatStart]);
+    const heatStartInputValue = useMemo(() => format(new Date(heatStart), 'yyyy-MM-dd'), [heatStart]);
+    const currentWeekStart = alignToWeekStart(new Date());
+    const isCurrentWeek = heatStart === currentWeekStart;
+    const canGoNextWeek = heatStart < currentWeekStart;
 
-    const insight = useMemo(() => {
-        if (!latestDelta) return '暂无偏差，继续保持当前节奏。';
-        const entries: Array<{ key: 'p' | 'c' | 's'; value: number }> = [
-            { key: 'p', value: latestDelta.p },
-            { key: 'c', value: latestDelta.c },
-            { key: 's', value: latestDelta.s },
-        ];
-        const strongest = entries.sort((a, b) => Math.abs(b.value) - Math.abs(a.value))[0];
-        const labelMap = { p: '生理', c: '认知', s: '冲动' } as const;
-        if (Math.abs(strongest.value) < 0.2) return '整体与基准接近，稳定状态。';
-        const direction = strongest.value > 0 ? '高于基准' : '低于基准';
-        return `${labelMap[strongest.key]}维度${direction}${formatDelta(strongest.value)}，留意触发场景。`;
-    }, [latestDelta]);
+    const shiftHeatWindow = (deltaWeeks: number) => {
+        setHeatStart(prev => clampHeatStart(addWeeks(new Date(prev), deltaWeeks)));
+    };
 
-    // Heatmap matrices
-    const matrixP = useMemo(() => buildMatrix(allHistoryLogs, l => l.values.p, heatRange, selectedTag), [allHistoryLogs, heatRange, selectedTag]);
-    const matrixC = useMemo(() => buildMatrix(allHistoryLogs, l => l.values.c, heatRange, selectedTag), [allHistoryLogs, heatRange, selectedTag]);
-    const matrixS = useMemo(() => buildMatrix(allHistoryLogs, l => l.values.s, heatRange, selectedTag), [allHistoryLogs, heatRange, selectedTag]);
-    const weekLabels = ['日', '一', '二', '三', '四', '五', '六'];
+    const handleHeatDateChange = (value: string) => {
+        if (!value) return;
+        const picked = new Date(`${value}T00:00:00`);
+        setHeatStart(clampHeatStart(picked));
+    };
 
-    // Seasonal stats per dimension
     const seasonStats = useMemo(() => {
         const map: Record<string, { p: number[]; c: number[]; s: number[] }> = {
             spring: { p: [], c: [], s: [] },
@@ -201,23 +240,21 @@ export const AnalyticsTab: React.FC = () => {
                     <div className="text-xs text-gray-500">{hint}</div>
                 </div>
             </div>
-            <div className="grid grid-cols-8 gap-1 text-[10px] text-gray-400">
-                <div className="h-6" />
-                {weekLabels.map(d => (
-                    <div key={d} className="text-center h-6 flex items-center justify-center">{d}</div>
+            <div className="grid grid-cols-8 gap-[1px] text-[9px] text-gray-400">
+                <div className="h-4" />
+                {dayLabels.map(d => (
+                    <div key={d} className="text-center h-4 flex items-center justify-center">{d}</div>
                 ))}
                 {Array.from({ length: 24 }).map((_, hour) => (
                     <React.Fragment key={hour}>
-                        <div className="h-6 flex items-center text-right pr-1">{hour.toString().padStart(2, '0')}</div>
+                        <div className="h-4 flex items-center text-right pr-1">{hour.toString().padStart(2, '0')}</div>
                         {matrix.map((col, day) => (
                             <div
                                 key={`${day}-${hour}`}
-                                className="h-6 rounded-md border border-white/5 flex items-center justify-center font-mono"
+                                className="h-4 rounded-sm border border-white/5"
                                 style={{ backgroundColor: colorScale(col[hour], palette) }}
-                                title={`${weekLabels[day]} ${hour}:00 -> ${col[hour] ? col[hour].toFixed(1) : '-'}`}
-                            >
-                                <span className="text-[10px] text-gray-100">{col[hour] ? col[hour].toFixed(1) : '-'}</span>
-                            </div>
+                                title={`${dayLabels[day]} ${hour}:00 -> ${col[hour] ? col[hour].toFixed(1) : '-'}`}
+                            />
                         ))}
                     </React.Fragment>
                 ))}
@@ -265,20 +302,30 @@ export const AnalyticsTab: React.FC = () => {
                 </div>
             </div>
 
-            {/* Baseline vs Actual + Filters */}
-            <div className="grid grid-cols-1 gap-3 mb-4">
-                <div className="bg-surface border border-white/10 rounded-2xl p-4 shadow-xl">
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="text-sm font-semibold text-gray-300">基准 vs 实际</div>
-                        <span className="text-[10px] text-gray-500 uppercase">Now</span>
-                    </div>
-                    {latestPoint ? (
-                        <div className="space-y-2">
-                            <div className="grid grid-cols-3 gap-2 text-xs">
-                                {(['p', 'c', 's'] as const).map(key => {
-                                    const baselineVal = latestPoint?.[`${key}_baseline` as keyof ChartDataPoint] as number;
-                                    const actualVal = ((latestPoint?.[`${key}_actual` as keyof ChartDataPoint]) ?? baselineVal) as number;
-                                    const deltaVal = latestDelta?.[key] || 0;
+            {/* Baseline (collapsible) */}
+            <div className="bg-surface border border-white/10 rounded-2xl p-4 shadow-xl mb-4">
+                <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold text-gray-300">基准概览</div>
+                    <button
+                        onClick={() => setShowBaseline(s => !s)}
+                        className="text-xs text-gray-400 hover:text-white"
+                    >
+                        {showBaseline ? '收起' : '展开'}
+                    </button>
+                </div>
+                {showBaseline && (
+                    <div className="mt-3 space-y-3">
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="text-sm font-semibold text-gray-300">本月中位数 vs 上月基准</div>
+                                <span className="text-[10px] text-gray-500 uppercase">{lastMonthBaseline.monthKey || 'baseline'}</span>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="grid grid-cols-3 gap-2 text-xs">
+                                    {(['p', 'c', 's'] as const).map(key => {
+                                    const baselineVal = lastMonthBaseline.values[key];
+                                    const currentVal = currentMonthStats.values[key];
+                                    const deltaVal = monthDelta[key];
                                     const color = key === 'p' ? 'text-green-400' : key === 'c' ? 'text-blue-400' : 'text-red-400';
                                     return (
                                         <div key={key} className="bg-white/5 rounded-lg p-2 border border-white/5">
@@ -287,7 +334,7 @@ export const AnalyticsTab: React.FC = () => {
                                                 <span className="text-[10px] text-gray-500">基准 {baselineVal.toFixed(1)}</span>
                                             </div>
                                             <div className="flex items-center justify-between mt-1">
-                                                <span className={cn("text-sm font-semibold", color)}>{actualVal.toFixed(1)}</span>
+                                                <span className={cn("text-sm font-semibold", color)}>{currentVal.toFixed(1)}</span>
                                                 <span
                                                     className={cn(
                                                         "text-[11px] font-mono",
@@ -300,84 +347,47 @@ export const AnalyticsTab: React.FC = () => {
                                         </div>
                                     );
                                 })}
+                                </div>
+                                <div className="text-xs text-gray-400 mt-1">
+                                    基准样本：{lastMonthBaseline.sample} 条（{lastMonthBaseline.monthKey || '—'}），可信度 {baselineConfidence}%{lastMonthBaseline.lowConfidence ? '，样本较少仅供参考' : ''}
+                                </div>
                             </div>
-                            <div className="text-xs text-gray-400 mt-1">{insight}</div>
                         </div>
-                    ) : (
-                        <div className="text-xs text-gray-500">今天还没有记录，快去“记录”页按下记录状态。</div>
-                    )}
-                </div>
 
-                <div className="bg-surface border border-white/10 rounded-2xl p-4 shadow-xl space-y-3">
-                    <div className="flex items-center justify-between">
-                        <div className="text-sm font-semibold text-gray-300">基准透明度</div>
-                        <div className="text-[11px] text-gray-500">可信度 {baselineConfidence}%</div>
-                    </div>
-                    <div className="text-[11px] text-gray-500">
-                        基准来源：最近 {baselineDays} 天 {dayType === 'all' ? '（全部样本）' : dayType === 'weekday' ? '仅工作日' : '仅周末'} · 样本 {baselineSample} 条
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap text-xs">
-                        <div className="flex bg-white/5 rounded-lg overflow-hidden border border-white/10">
-                            {[7, 30].map((d) => (
+                        <div className="bg-white/5 rounded-xl p-3 border border-white/10 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <div className="text-sm font-semibold text-gray-300">筛选</div>
+                                <div className="text-[11px] text-gray-500">标签</div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
                                 <button
-                                    key={d}
-                                    onClick={() => setBaselineDays(d as 7 | 30)}
-                                    className={cn(
-                                        "px-3 py-1 border-r border-white/10 last:border-r-0",
-                                        baselineDays === d ? "bg-white text-black font-semibold" : "text-gray-400"
-                                    )}
-                                >
-                                    {d}天
-                                </button>
-                            ))}
-                        </div>
-                        <div className="flex bg-white/5 rounded-lg overflow-hidden border border-white/10">
-                            {[
-                                { id: 'all', label: '全部' },
-                                { id: 'weekday', label: '工作日' },
-                                { id: 'weekend', label: '周末' },
-                            ].map(opt => (
-                                <button
-                                    key={opt.id}
-                                    onClick={() => setDayType(opt.id as DayType)}
-                                    className={cn(
-                                        "px-3 py-1 border-r border-white/10 last:border-r-0",
-                                        dayType === opt.id ? "bg-primary/20 text-white font-semibold" : "text-gray-400"
-                                    )}
-                                >
-                                    {opt.label}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs text-gray-500">标签筛选：</span>
-                            <button
-                                onClick={() => setSelectedTag('all')}
-                                className={cn(
-                                    "px-3 py-1 rounded-full text-xs border transition-all",
-                                    selectedTag === 'all' ? "bg-primary text-black border-primary" : "border-white/10 text-gray-400 hover:border-white/30"
-                                )}
-                            >
-                                全部
-                            </button>
-                            {availableTags.map(tag => (
-                                <button
-                                    key={tag}
-                                    onClick={() => setSelectedTag(tag)}
+                                    onClick={() => setSelectedTag('all')}
                                     className={cn(
                                         "px-3 py-1 rounded-full text-xs border transition-all",
-                                        selectedTag === tag ? "bg-primary text-black border-primary" : "border-white/10 text-gray-300 hover:border-white/30"
+                                        selectedTag === 'all' ? "bg-primary text-black border-primary" : "border-white/10 text-gray-400 hover:border-white/30"
                                     )}
                                 >
-                                    {tag}
+                                    全部
                                 </button>
-                            ))}
-                            {availableTags.length === 0 && (
-                                <span className="text-xs text-gray-600">暂无标签样本</span>
-                            )}
+                                {availableTags.map(tag => (
+                                    <button
+                                        key={tag}
+                                        onClick={() => setSelectedTag(tag)}
+                                        className={cn(
+                                            "px-3 py-1 rounded-full text-xs border transition-all",
+                                            selectedTag === tag ? "bg-primary text-black border-primary" : "border-white/10 text-gray-300 hover:border-white/30"
+                                        )}
+                                    >
+                                        {tag}
+                                    </button>
+                                ))}
+                                {availableTags.length === 0 && (
+                                    <span className="text-xs text-gray-600">暂无标签可筛选</span>
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
             </div>
 
             {/* Charts + Heatmap + Seasonal */}
@@ -396,30 +406,72 @@ export const AnalyticsTab: React.FC = () => {
 
                 {/* Heatmap 2D with tag overlay */}
                 <div className="bg-surface border border-white/10 rounded-2xl p-4 shadow-xl space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div>
-                            <div className="text-sm font-semibold text-gray-200">情绪地图</div>
-                            <div className="text-xs text-gray-500">按“小时 x 星期”叠加标签热度</div>
+                            <div className="text-sm font-semibold text-gray-200">情绪热图（上月数据）</div>
+                            <div className="text-xs text-gray-500">
+                                以 7 天为一页，自然周对齐，小时 x 日期；叠加标签密度
+                            </div>
                         </div>
-                        <div className="flex bg-white/5 rounded-lg overflow-hidden border border-white/10 text-xs">
-                            {[1, 7, 30].map(r => (
+                        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 sm:gap-3">
+                            <div className="flex flex-wrap items-center gap-2 justify-end">
                                 <button
-                                    key={r}
-                                    onClick={() => setHeatRange(r as HeatmapRange)}
-                                    className={cn(
-                                        "px-3 py-1 border-r border-white/10 last:border-r-0",
-                                        heatRange === r ? "bg-primary/20 text-white font-semibold" : "text-gray-400"
-                                    )}
+                                    className="px-2 py-1 rounded border border-white/10 text-xs hover:border-white/30"
+                                    onClick={() => shiftHeatWindow(-1)}
+                                    title="上一周"
                                 >
-                                    {r === 1 ? '日' : r === 7 ? '周' : '月'}
+                                    &lt;
                                 </button>
-                            ))}
+                                <div className="text-xs text-gray-400">
+                                    {heatRangeLabel}
+                                </div>
+                                <button
+                                    className="px-2 py-1 rounded border border-white/10 text-xs hover:border-white/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    onClick={() => shiftHeatWindow(1)}
+                                    disabled={!canGoNextWeek}
+                                    title="下一周"
+                                >
+                                    &gt;
+                                </button>
+                                <input
+                                    type="date"
+                                    value={heatStartInputValue}
+                                    onChange={(e) => handleHeatDateChange(e.target.value)}
+                                    className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-xs text-gray-200 focus:outline-none"
+                                    title="选择任意日期，自动对齐到所在周"
+                                />
+                                <button
+                                    className="px-2 py-1 rounded border border-white/10 text-xs hover:border-white/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    onClick={() => setHeatStart(clampHeatStart(new Date()))}
+                                    disabled={isCurrentWeek}
+                                >
+                                    回到本周
+                                </button>
+                            </div>
+                            <div className="flex bg-white/5 rounded-lg overflow-hidden border border-white/10 text-xs">
+                                {[
+                                    { id: 'c', label: 'C 认知', active: "bg-primary text-black border-primary" },
+                                    { id: 'p', label: 'P 身体', active: "bg-green-500 text-black border-green-500" },
+                                    { id: 's', label: 'S 冲动', active: "bg-red-500 text-black border-red-500" },
+                                ].map(opt => (
+                                    <button
+                                        key={opt.id}
+                                        onClick={() => setHeatView(opt.id as HeatView)}
+                                        className={cn(
+                                            "px-3 py-1 border-r border-white/10 last:border-r-0",
+                                            heatView === opt.id ? opt.active : "text-gray-400"
+                                        )}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
                     <div className="space-y-3">
-                        {renderMatrix(matrixC, [59, 130, 246], "认知黄金时段", "蓝色越深，注意力越高")}
-                        {renderMatrix(matrixP, [34, 197, 94], "生理活力时段", "绿色越深，活力越高")}
-                        {renderMatrix(matrixS, [239, 68, 68], "生理冲动时段", "红色越深，欲望越高")}
+                        {heatView === 'c' && renderMatrix(matrixC, [59, 130, 246], "认知黄金时段", "蓝色越深，注意力越高")}
+                        {heatView === 'p' && renderMatrix(matrixP, [34, 197, 94], "生理活力时段", "绿色越深，活力越高")}
+                        {heatView === 's' && renderMatrix(matrixS, [239, 68, 68], "冲动强度时段", "红色越深，欲望越高")}
                     </div>
                 </div>
 
@@ -427,7 +479,7 @@ export const AnalyticsTab: React.FC = () => {
                 <div className="bg-surface border border-white/10 rounded-2xl p-4 shadow-xl space-y-3">
                     <div className="flex items-center justify-between">
                         <div className="text-sm font-semibold text-gray-200">季节性分析</div>
-                        <div className="text-xs text-gray-500">生理 / 认知 / 冲动</div>
+                        <div className="text-xs text-gray-500">身体 / 认知 / 冲动</div>
                     </div>
                     <div className="grid grid-cols-2 gap-3 text-xs">
                         {(['spring', 'summer', 'autumn', 'winter'] as const).map(season => (
@@ -440,7 +492,7 @@ export const AnalyticsTab: React.FC = () => {
                                     <span className="text-blue-400 font-semibold">C {seasonStats[season].c ? seasonStats[season].c.toFixed(1) : '-'}</span>
                                     <span className="text-red-400 font-semibold">S {seasonStats[season].s ? seasonStats[season].s.toFixed(1) : '-'}</span>
                                 </div>
-                                <div className="text-[11px] text-gray-500">按季节汇总均值，帮助规划作息与策略。</div>
+                                <div className="text-[11px] text-gray-500">按季节看平均水平，用于参考规划。</div>
                             </div>
                         ))}
                     </div>

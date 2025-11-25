@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { LogEntry, ChatSession, AppSettings, CalendarEvent } from '../types';
+import type { LogEntry, ChatSession, AppSettings, CalendarEvent, MonthlyBaseline } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface NeuroTrackerDB extends DBSchema {
@@ -22,10 +22,15 @@ interface NeuroTrackerDB extends DBSchema {
         value: CalendarEvent;
         indexes: { 'by-startTime': number };
     };
+    baselines: {
+        key: string; // monthKey
+        value: MonthlyBaseline;
+        indexes: { 'by-month': string };
+    };
 }
 
 const DB_NAME = 'neuro-tracker-db';
-const DB_VERSION = 2; // Increment version for new store
+const DB_VERSION = 3; // Increment version for new store
 
 class StorageService {
     private dbPromise: Promise<IDBPDatabase<NeuroTrackerDB>>;
@@ -54,6 +59,12 @@ class StorageService {
                 if (!db.objectStoreNames.contains('events')) {
                     const eventStore = db.createObjectStore('events', { keyPath: 'id' });
                     eventStore.createIndex('by-startTime', 'startTime');
+                }
+
+                // Baselines store (New in v3)
+                if (!db.objectStoreNames.contains('baselines')) {
+                    const baselineStore = db.createObjectStore('baselines', { keyPath: 'monthKey' });
+                    baselineStore.createIndex('by-month', 'monthKey');
                 }
             },
         });
@@ -134,6 +145,23 @@ class StorageService {
     async deleteEvent(id: string): Promise<void> {
         const db = await this.dbPromise;
         await db.delete('events', id);
+    }
+
+    // --- Monthly Baselines ---
+
+    async saveBaseline(baseline: MonthlyBaseline): Promise<void> {
+        const db = await this.dbPromise;
+        await db.put('baselines', baseline);
+    }
+
+    async getBaseline(monthKey: string): Promise<MonthlyBaseline | undefined> {
+        const db = await this.dbPromise;
+        return db.get('baselines', monthKey);
+    }
+
+    async getAllBaselines(): Promise<MonthlyBaseline[]> {
+        const db = await this.dbPromise;
+        return db.getAllFromIndex('baselines', 'by-month');
     }
 
 }

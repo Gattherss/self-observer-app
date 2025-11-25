@@ -48,3 +48,11 @@ export interface CalendarEvent {
     description?: string;
     logId?: string; // optional: link to a specific log record
 }
+
+export interface MonthlyBaseline {
+    monthKey: string; // e.g. 2025-11
+    values: TrinityValue;
+    sample: number;
+    lowConfidence?: boolean;
+    computedAt: number;
+}
