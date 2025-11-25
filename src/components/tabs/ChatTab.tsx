@@ -13,7 +13,6 @@ import { startOfDay, endOfDay } from 'date-fns';
 
 export const ChatTab: React.FC = () => {
     const {
-        recentLogs,
         settings,
         loadSettings,
         currentSessionId,

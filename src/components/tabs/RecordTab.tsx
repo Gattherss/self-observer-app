@@ -12,6 +12,15 @@ import { soundService } from '../../services/sound';
 
 export const RecordTab: React.FC = () => {
     const { currentValues, setTrinityValue, resetValues, refreshLogs } = useStore();
+    const clampVal = (v: number) => {
+        const n = Number.isFinite(v) ? v : 0;
+        return Math.min(10, Math.max(0, n));
+    };
+    const safeValues = {
+        p: clampVal(currentValues.p),
+        c: clampVal(currentValues.c),
+        s: clampVal(currentValues.s),
+    };
     const [trend, setTrend] = useState<TrendDirection>('flat');
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [isSaving, setIsSaving] = useState(false);
@@ -107,29 +116,29 @@ export const RecordTab: React.FC = () => {
 
             {/* Radar Chart */}
             <div className="flex justify-center mb-10">
-                <RadarDisplay values={currentValues} size={280} />
+                <RadarDisplay values={safeValues} size={280} />
             </div>
 
             {/* Sliders */}
             <div className="space-y-2 mb-8">
                 <InputSlider
                     label="生理觉醒 (Physical)"
-                    value={currentValues.p}
-                    onChange={(v) => setTrinityValue('p', v)}
+                    value={safeValues.p}
+                    onChange={(v) => setTrinityValue('p', clampVal(v))}
                     color="#22c55e"
                     statusText={getSliderStatus('p', currentValues.p)}
                 />
                 <InputSlider
                     label="认知专注 (Cognitive)"
-                    value={currentValues.c}
-                    onChange={(v) => setTrinityValue('c', v)}
+                    value={safeValues.c}
+                    onChange={(v) => setTrinityValue('c', clampVal(v))}
                     color="#3b82f6"
                     statusText={getSliderStatus('c', currentValues.c)}
                 />
                 <InputSlider
                     label="冲动强度 (Impulse)"
-                    value={currentValues.s}
-                    onChange={(v) => setTrinityValue('s', v)}
+                    value={safeValues.s}
+                    onChange={(v) => setTrinityValue('s', clampVal(v))}
                     color="#ef4444"
                     statusText={getSliderStatus('s', currentValues.s)}
                 />

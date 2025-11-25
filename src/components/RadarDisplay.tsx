@@ -15,26 +15,29 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
     className = "",
     showLabels = true
 }) => {
+    // Fallback to zeros if values is missing to avoid NaN in SVG
+    const safeValues = values ?? { p: 0, c: 0, s: 0 };
     const center = size / 2;
     const radius = (size / 2) * 0.8; // 80% of container to leave room for labels
 
     // Calculate points
     const points = useMemo(() => {
         const getPoint = (value: number, angleDeg: number) => {
+            const safe = Number.isFinite(value) ? Math.max(0, Math.min(10, value)) : 0;
             const angleRad = (angleDeg - 90) * (Math.PI / 180); // -90 to start at top
-            const dist = (value / 10) * radius;
+            const dist = (safe / 10) * radius;
             return {
                 x: center + dist * Math.cos(angleRad),
                 y: center + dist * Math.sin(angleRad)
             };
         };
 
-        const p = getPoint(values.p, 0);   // Top
-        const c = getPoint(values.c, 120); // Bottom Right
-        const s = getPoint(values.s, 240); // Bottom Left
+        const p = getPoint(safeValues.p, 0);   // Top
+        const c = getPoint(safeValues.c, 120); // Bottom Right
+        const s = getPoint(safeValues.s, 240); // Bottom Left
 
         return { p, c, s };
-    }, [values, center, radius]);
+    }, [safeValues, center, radius]);
 
     // Background triangles (grid)
     const gridLevels = [2, 4, 6, 8, 10];

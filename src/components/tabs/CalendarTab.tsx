@@ -35,6 +35,17 @@ export const CalendarTab: React.FC = () => {
         storage.getLogs(dayStart, dayEnd).then(setDayLogs);
     }, [selectedDate]);
 
+    // Debug/diagnostic: log counts when选中日期变化，方便确认圆点来源
+    useEffect(() => {
+        const dayStart = startOfDay(selectedDate).getTime();
+        const dayEnd = endOfDay(selectedDate).getTime();
+        (async () => {
+            const logs = await storage.getLogs(dayStart, dayEnd);
+            const evts = (await storage.getEvents()).filter(e => isSameDay(e.startTime, selectedDate));
+            console.info(`[Calendar] ${format(selectedDate, 'yyyy-MM-dd')} logs: ${logs.length}, events: ${evts.length}`);
+        })();
+    }, [selectedDate]);
+
     const days = eachDayOfInterval({
         start: startOfMonth(currentDate),
         end: endOfMonth(currentDate)
@@ -90,7 +101,12 @@ export const CalendarTab: React.FC = () => {
         return events.some(e => isSameDay(e.startTime, date));
     };
 
-    const dayEvents = events.filter(e => isSameDay(e.startTime, selectedDate));
+    const dayEventLogIds = new Set(dayLogs.map(l => l.id));
+    const dayEvents = events.filter(e =>
+        isSameDay(e.startTime, selectedDate) &&
+        e.logId &&
+        dayEventLogIds.has(e.logId)
+    );
 
     const handleDeleteLog = async (logId: string) => {
         if (!window.confirm('确认删除这条记录吗？')) return;
@@ -129,6 +145,14 @@ export const CalendarTab: React.FC = () => {
         storage.getLogs(start, end).then(setAllMonthLogs);
     };
 
+    const handleDeleteEvent = async (eventId: string) => {
+        if (!window.confirm('确认删除这个事件吗？')) return;
+        await storage.deleteEvent(eventId);
+        const start = startOfMonth(currentDate).getTime();
+        const end = endOfMonth(currentDate).getTime();
+        storage.getEvents().then(setEvents);
+        storage.getLogs(start, end).then(setAllMonthLogs);
+    };
     useEffect(() => {
         const handler = () => {
             const start = startOfMonth(currentDate).getTime();
@@ -243,66 +267,16 @@ export const CalendarTab: React.FC = () => {
                             <h3 className="text-base sm:text-sm font-semibold text-gray-400">
                                 {format(selectedDate, 'EEEE, MMMM d, yyyy')}
                             </h3>
-                            <button
-                                onClick={() => setShowEvents(v => !v)}
-                                className="text-sm sm:text-xs px-3 py-2 sm:px-2 sm:py-1 rounded-lg border border-white/10 text-gray-300 hover:border-white/30"
-                            >
-                                {showEvents ? "收起事件" : "事件"}
-                            </button>
+                        </div>
+                        {/* Debug info: show counts to spot dot origins */}
+                        <div className="text-[11px] text-gray-500 mt-1">
+                            日志: {dayLogs.length} 条；事件: {dayEvents.length} 条
                         </div>
                     </div>
 
-                    {/* Events inline editor (collapsible) */}
-                    {showEvents && (
-                        <div className="flex-none mb-3 space-y-2">
-                            <div className="flex items-center justify-between text-sm sm:text-xs text-gray-500">
-                                <span className="flex items-center gap-2 text-gray-300 font-semibold"><CalendarPlus size={14} /> 日程 / 事件</span>
-                                <span className="text-[11px] text-gray-500">同步到 Chat 语境</span>
-                            </div>
-                            <div className="grid grid-cols-1 gap-2 text-sm sm:text-xs">
-                                <input
-                                    value={eventTitle}
-                                    onChange={e => setEventTitle(e.target.value)}
-                                    className="bg-background border border-white/10 rounded-lg p-3 sm:p-2 text-base sm:text-sm"
-                                    placeholder="事件标题（如会议、运动）"
-                                />
-                                <div className="grid grid-cols-2 gap-2">
-                                    <input
-                                        type="time"
-                                        value={eventTime}
-                                        onChange={e => setEventTime(e.target.value)}
-                                        className="bg-background border border-white/10 rounded-lg p-3 sm:p-2 text-base sm:text-sm"
-                                    />
-                                    <input
-                                        value={eventDesc}
-                                        onChange={e => setEventDesc(e.target.value)}
-                                        className="bg-background border border-white/10 rounded-lg p-3 sm:p-2 text-base sm:text-sm"
-                                        placeholder="备注 / 影响"
-                                    />
-                                </div>
-                                <button
-                                    onClick={handleAddEvent}
-                                    className="w-full py-3 sm:py-2 rounded-lg bg-white text-black font-semibold text-base sm:text-sm hover:bg-gray-100 transition-colors"
-                                >
-                                    保存事件
-                                </button>
-                            </div>
-                            <div className="space-y-1">
-                                {dayEvents.length === 0 && (
-                                    <div className="text-sm sm:text-xs text-gray-600">这一天暂无事件，添加后会出现在记录展开处。</div>
-                                )}
-                                {dayEvents.map(evt => (
-                                    <div key={evt.id} className="bg-white/5 border border-white/10 rounded-lg p-3 sm:p-2 text-sm sm:text-xs text-gray-200">
-                                        <div className="flex items-center justify-between">
-                                            <span className="font-semibold">{evt.title}</span>
-                                            <span className="text-gray-500">{format(evt.startTime, 'HH:mm')}</span>
-                                        </div>
-                                        {evt.description && <div className="text-[11px] text-gray-400 mt-1">{evt.description}</div>}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                    {/* Events inline editor removed per request; events仍显示在下方列表 */}
+
+                    {/* 当天事件列表已移除，事件仍随记录显示 */}
 
                     {/* Records stack */}
                     <div className="space-y-3">
